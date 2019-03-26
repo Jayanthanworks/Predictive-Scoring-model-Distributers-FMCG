@@ -1,0 +1,384 @@
+# Predictive-Scoring-model-Distributers-FMCG
+Probability and Predictive Scoring model for Stationary Distributors
+Distributer Sales Analytics
+This is an R Markdown Notebook. When you execute code within the notebook, the results appear beneath the code.
+Try executing this chunk by clicking the Run button within the chunk or by placing your cursor inside it and pressing Ctrl+Shift+Enter.
+# Business Background : 
+#The Company 'X' has got 93 Distributers in the TN region for selling it's products to the retail and institutional customers in the market.
+# The Sales data is present for all these dis's from 2014 to 2017 March both in qty and value overall/category wise/month wise.
+
+# Business Objective : 
+#1)To find the Active & inactive distributers based on their secondary Sales.
+
+#2)To design and channelise trade schemes based on distributer's #futureperformance( secondary sales) 
+
+#3)To identify poor performers and take corrective actions for improvement 
+                        
+
+# Concepts Exploration: 
+#1)RFM Analysis - ( Recency,Frequency,Monetory)
+#2)Scoring model deployment consisting of probability                       
+# model and prediction model to predict sales.
+#3)Flowchart on Model : 
+#  1)find RFM metrics for the distributers who billed on 2015.                         
+#  2)To create seperate dataframe for customers who actually billed on 2016.
+#  3)To create a probability model for the active distributers(billed on 2016) #with RFM metrics captured on year 2015
+#  4)To Create a predictive model(Regression)fordistributers billed in 2016 #against Avg and Max value parameters in the year 2015.
+#  5)To creat a new RFM model till current data and fit the created probaibilty and prediction modelin the distributer's data 
+
+# To be precise -The model will find out what is the proability of a distributer being Active on inActive / If Active how much Sales will be generated ?             
+getwd()
+## [1] "C:/Users/Jayanthan/Downloads"
+setwd("C:/Users/Jayanthan/Downloads")
+dist_data<- read.csv("Distributer sales analytics 1.csv",header = FALSE) 
+class(dist_data) # Dataframe
+## [1] "data.frame"
+head(dist_data) 
+##                 V1         V2   V3
+## 1 VEDA ENTERPRISES 2014-04-07 0.61
+## 2 VEDA ENTERPRISES 2014-05-07 0.10
+## 3 VEDA ENTERPRISES 2014-06-07 0.57
+## 4 VEDA ENTERPRISES 2014-07-07 0.03
+## 5 VEDA ENTERPRISES 2014-08-07 0.03
+## 6 VEDA ENTERPRISES 2014-09-07 0.03
+# Naming the columns of the dataframe
+colnames(dist_data)<-c("Distributer","date","sales")
+View(dist_data)
+# To extract date of purchase and year of purchase seperately
+dist_data$date<-as.Date(dist_data$date,"%Y-%m-%d")
+dist_data$year_purchase<-as.numeric(format(dist_data$date,"%Y"))
+summary(dist_data)
+##               Distributer         date                sales        
+##  AKSHARA            :  147   Min.   :2014-04-07   Min.   : 0.0000  
+##  BALU PAPER STORE   :  147   1st Qu.:2015-01-14   1st Qu.: 0.0000  
+##  BANU AGENCIES      :  147   Median :2015-09-30   Median : 0.0000  
+##  DIAMOND ENTERPRISES:  147   Mean   :2015-10-09   Mean   : 0.3577  
+##  JOTHI AGENCIES     :  147   3rd Qu.:2016-07-07   3rd Qu.: 0.0800  
+##  JOY AND CO         :  147   Max.   :2017-04-21   Max.   :53.2800  
+##  (Other)            :10630                                         
+##  year_purchase 
+##  Min.   :2014  
+##  1st Qu.:2015  
+##  Median :2015  
+##  Mean   :2015  
+##  3rd Qu.:2016  
+##  Max.   :2017  
+## 
+# Defining time period defined till 22 march 2017 
+dist_data$days_since<-as.numeric(difftime(time1 = "2017-04-22",
+                                          time2 = dist_data$date,
+                                          units = "days"))
+library(sqldf)
+## Loading required package: gsubfn
+## Loading required package: proto
+## Loading required package: RSQLite
+# Compute RFM variables as of a year ago
+Distributers_2015 = sqldf("SELECT Distributer,
+                               MIN(days_since) - 365 AS 'recency',
+                               MAX(days_since) - 365 AS 'first_purchase',
+                               COUNT(*) AS 'frequency',
+                               AVG(sales) AS 'avg_amount',
+                               MAX(sales) AS 'max_amount'
+                        FROM dist_data
+                        WHERE days_since > 365
+                        GROUP BY 1")
+head(Distributers_2015)
+##           Distributer     recency first_purchase frequency avg_amount
+## 1     A.K.Enterprises 296.7708333       701.7708        54 0.02055556
+## 2      A.V.M. TRADERS  60.7708333       745.7708        91 0.14791209
+## 3             AKSHARA   0.7708333       745.7708        99 0.67030303
+## 4    ANANDHA AGENCIES   0.7708333       745.7708        96 0.00000000
+## 5  ARAVINDHA AGENCIES   0.7708333       745.7708        96 0.00000000
+## 6 AYYANAR BOOK CENTRE   0.7708333       592.7708        65 0.06123077
+##   max_amount
+## 1       0.14
+## 2       1.97
+## 3       6.91
+## 4       0.00
+## 5       0.00
+## 6       0.96
+# Compute revenues generated by customers in 2016
+
+revenue_2016 = sqldf("SELECT Distributer, SUM(sales) AS 'revenue_2016'
+                      FROM dist_data
+                      WHERE year_purchase = 2016
+                      GROUP BY 1")
+head(revenue_2016)
+##           Distributer revenue_2016
+## 1      A.V.M. TRADERS         1.68
+## 2             AKSHARA         4.99
+## 3    ANANDHA AGENCIES         0.00
+## 4  ARAVINDHA AGENCIES         0.00
+## 5 AYYANAR BOOK CENTRE         0.98
+## 6     Andavar Traders         0.60
+# Create a dataframe by Merging 2015 'Distributers' and 2016 'revenue'
+
+combine_data<-merge(Distributers_2015,revenue_2016,all.x = TRUE)
+
+combine_data$revenue_2016[is.na(combine_data$revenue_2016)]=0
+
+combine_data$active_2016 = as.numeric(combine_data$revenue_2016 > 0)
+head(combine_data)
+##          Distributer     recency first_purchase frequency avg_amount
+## 1    A.K.Enterprises 296.7708333       701.7708        54 0.02055556
+## 2     A.V.M. TRADERS  60.7708333       745.7708        91 0.14791209
+## 3            AKSHARA   0.7708333       745.7708        99 0.67030303
+## 4   ANANDHA AGENCIES   0.7708333       745.7708        96 0.00000000
+## 5    Andavar Traders  60.7708333       745.7708        91 0.09538462
+## 6 ARAVINDHA AGENCIES   0.7708333       745.7708        96 0.00000000
+##   max_amount revenue_2016 active_2016
+## 1       0.14         0.00           0
+## 2       1.97         1.68           1
+## 3       6.91         4.99           1
+## 4       0.00         0.00           0
+## 5       2.62         0.60           1
+## 6       0.00         0.00           0
+View(combine_data)
+summary(combine_data)
+##              Distributer    recency         first_purchase  
+##  A.K.Enterprises   : 1   Min.   :  0.7708   Min.   : 60.77  
+##  A.V.M. TRADERS    : 1   1st Qu.:  0.7708   1st Qu.:745.77  
+##  AKSHARA           : 1   Median :  0.7708   Median :745.77  
+##  ANANDHA AGENCIES  : 1   Mean   : 18.5012   Mean   :699.31  
+##  Andavar Traders   : 1   3rd Qu.:  0.7708   3rd Qu.:745.77  
+##  ARAVINDHA AGENCIES: 1   Max.   :296.7708   Max.   :745.77  
+##  (Other)           :83                                      
+##    frequency       avg_amount        max_amount      revenue_2016    
+##  Min.   : 9.00   Min.   :0.00000   Min.   : 0.000   Min.   :  0.000  
+##  1st Qu.:91.00   1st Qu.:0.01365   1st Qu.: 0.140   1st Qu.:  0.000  
+##  Median :96.00   Median :0.12121   Median : 1.350   Median :  1.290  
+##  Mean   :89.45   Mean   :0.40752   Mean   : 4.261   Mean   :  8.498  
+##  3rd Qu.:99.00   3rd Qu.:0.34889   3rd Qu.: 3.910   3rd Qu.:  5.360  
+##  Max.   :99.00   Max.   :5.94949   Max.   :53.280   Max.   :225.110  
+##                                                                      
+##   active_2016    
+##  Min.   :0.0000  
+##  1st Qu.:0.0000  
+##  Median :1.0000  
+##  Mean   :0.6966  
+##  3rd Qu.:1.0000  
+##  Max.   :1.0000  
+## 
+# Building a probability model with multinom function
+library(nnet)
+prob.model = multinom(formula = active_2016~recency +  first_purchase + 
+                        frequency + avg_amount + max_amount,
+                      data = combine_data)
+## # weights:  7 (6 variable)
+## initial  value 61.690099 
+## iter  10 value 20.673927
+## iter  20 value 5.246734
+## iter  30 value 3.835192
+## iter  40 value 3.795787
+## iter  50 value 3.788610
+## iter  60 value 3.786209
+## iter  70 value 3.777074
+## iter  80 value 3.776665
+## iter  90 value 3.776358
+## final  value 3.776013 
+## converged
+coef = summary(prob.model)$coefficients
+std = summary(prob.model)$standard.errors
+print(coef)
+##    (Intercept)        recency first_purchase      frequency     avg_amount 
+##    121.5294371      0.1613332     -0.3692921      1.5322061     85.5024747 
+##     max_amount 
+##     -0.8957550
+print(std)
+##    (Intercept)        recency first_purchase      frequency     avg_amount 
+##     0.01075486     0.18794820     0.19023939     1.43323284     0.01644625 
+##     max_amount 
+##     0.67910425
+print(coef / std)
+##    (Intercept)        recency first_purchase      frequency     avg_amount 
+##   11299.950182       0.858392      -1.941197       1.069056    5198.903066 
+##     max_amount 
+##      -1.319024
+# Creating a separate dataframe for those active purchases in 2016
+z = which(combine_data$active_2016 == 1)
+head(combine_data[z, ])
+##            Distributer    recency first_purchase frequency avg_amount
+## 2       A.V.M. TRADERS 60.7708333       745.7708        91 0.14791209
+## 3              AKSHARA  0.7708333       745.7708        99 0.67030303
+## 5      Andavar Traders 60.7708333       745.7708        91 0.09538462
+## 7  AYYANAR BOOK CENTRE  0.7708333       592.7708        65 0.06123077
+## 9     Balu Enterprises  0.7708333       684.7708        91 0.03417582
+## 10    BALU PAPER STORE  0.7708333       745.7708        99 0.34888889
+##    max_amount revenue_2016 active_2016
+## 2        1.97         1.68           1
+## 3        6.91         4.99           1
+## 5        2.62         0.60           1
+## 7        0.96         0.98           1
+## 9        0.42         1.21           1
+## 10       4.42         2.53           1
+summary(combine_data[z,])
+##               Distributer    recency        first_purchase  
+##  A.V.M. TRADERS     : 1   Min.   : 0.7708   Min.   : 60.77  
+##  AKSHARA            : 1   1st Qu.: 0.7708   1st Qu.:705.27  
+##  Andavar Traders    : 1   Median : 0.7708   Median :745.77  
+##  AYYANAR BOOK CENTRE: 1   Mean   :11.2708   Mean   :679.79  
+##  Balu Enterprises   : 1   3rd Qu.: 0.7708   3rd Qu.:745.77  
+##  BALU PAPER STORE   : 1   Max.   :98.7708   Max.   :745.77  
+##  (Other)            :56                                     
+##    frequency       avg_amount        max_amount      revenue_2016    
+##  Min.   : 9.00   Min.   :0.01429   Min.   : 0.210   Min.   :  0.030  
+##  1st Qu.:91.00   1st Qu.:0.09611   1st Qu.: 1.005   1st Qu.:  1.165  
+##  Median :99.00   Median :0.19707   Median : 2.460   Median :  3.255  
+##  Mean   :88.39   Mean   :0.57786   Mean   : 5.832   Mean   : 12.199  
+##  3rd Qu.:99.00   3rd Qu.:0.49719   3rd Qu.: 6.348   3rd Qu.:  7.760  
+##  Max.   :99.00   Max.   :5.94949   Max.   :53.280   Max.   :225.110  
+##                                                                      
+##   active_2016
+##  Min.   :1   
+##  1st Qu.:1   
+##  Median :1   
+##  Mean   :1   
+##  3rd Qu.:1   
+##  Max.   :1   
+## 
+# Building a prediction Sales model -1 
+
+amount.model = lm(formula = revenue_2016 ~ avg_amount+max_amount,data =    
+                   combine_data[z,])
+summary(amount.model)
+## 
+## Call:
+## lm(formula = revenue_2016 ~ avg_amount + max_amount, data = combine_data[z, 
+##     ])
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -36.387  -2.912   0.989   2.706  39.654 
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(>|t|)    
+## (Intercept)  -2.2398     1.5572  -1.438    0.156    
+## avg_amount   41.8877     3.2582  12.856  < 2e-16 ***
+## max_amount   -1.6748     0.3592  -4.662 1.83e-05 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 10.44 on 59 degrees of freedom
+## Multiple R-squared:  0.8957, Adjusted R-squared:  0.8922 
+## F-statistic: 253.3 on 2 and 59 DF,  p-value: < 2.2e-16
+# visualise the prediction 
+plot(x = combine_data[z,]$revenue_2016, y = amount.model$fitted.values)
+ 
+# Observation : As the date seems not to bring out a linear model. We will convert the prediction to log
+#  New Prediction model, using a log-transform (version 2)
+amount.model = lm(formula = log(revenue_2016) ~ log(avg_amount) + 
+                                  log(max_amount), data = combine_data[z, ])
+summary(amount.model)
+## 
+## Call:
+## lm(formula = log(revenue_2016) ~ log(avg_amount) + log(max_amount), 
+##     data = combine_data[z, ])
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -3.2446 -0.5948  0.2720  0.8512  1.5799 
+## 
+## Coefficients:
+##                 Estimate Std. Error t value Pr(>|t|)   
+## (Intercept)       2.3657     0.7599   3.113  0.00285 **
+## log(avg_amount)   0.9566     0.3091   3.094  0.00301 **
+## log(max_amount)   0.1230     0.3207   0.384  0.70273   
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 1.175 on 59 degrees of freedom
+## Multiple R-squared:  0.5925, Adjusted R-squared:  0.5787 
+## F-statistic:  42.9 on 2 and 59 DF,  p-value: 3.149e-12
+# observation - Pvalue seems significant for Avgamount
+# Plotting the Actual and predicted model
+
+
+plot(x = log(combine_data[z,]$ revenue_2016),y= amount.model$fitted.values)
+ 
+# Compute RFM variables till current date
+Distributers_2016 = sqldf("SELECT Distributer,
+                               MIN(days_since) AS 'recency',
+                               MAX(days_since) AS 'first_purchase',
+                               COUNT(*) AS 'frequency',
+                               AVG(sales) AS 'avg_amount',
+                               MAX(sales) AS 'max_amount'
+                        FROM dist_data GROUP BY 1")
+
+head(Distributers_2016)
+##           Distributer     recency first_purchase frequency avg_amount
+## 1     A.K.Enterprises   0.7708333      1066.7708        60  0.0185000
+## 2      A.V.M. TRADERS 425.7708333      1110.7708        91  0.1479121
+## 3             AKSHARA   0.7708333      1110.7708       147  0.4546259
+## 4    ANANDHA AGENCIES   0.7708333      1110.7708       144  0.0000000
+## 5  ARAVINDHA AGENCIES   0.7708333      1110.7708       144  0.0000000
+## 6 AYYANAR BOOK CENTRE  31.7708333       957.7708        69  0.1386957
+##   max_amount
+## 1       0.14
+## 2       1.97
+## 3       6.91
+## 4       0.00
+## 5       0.00
+## 6       5.59
+View(Distributers_2016)
+# Prediction of probability,Sales, Scoring  based on 2016 data 
+Distributers_2016$prob_predict<-predict(object = prob.model,newdata = Distributers_2016,type = "probs")
+Distributers_2016$revenue_predict<-exp(predict(object=amount.model,newdata = Distributers_2016))
+Distributers_2016$score_predict<-Distributers_2016$prob_predict*Distributers_2016$revenue_predict
+head(Distributers_2016$revenue_predict)
+## [1] 0.1840078 1.8607379 6.3560118 0.0000000 0.0000000 1.9891280
+View(Distributers_2016$revenue_predict)
+hist(Distributers_2016$score_predict)
+ 
+# The Histogram of Distributers score against frequency gives that majority of them lies under a score of 10.
+# How many distributers will have an expected revenue of more than 50 L?
+M = which(Distributers_2016$score_predict > 80)
+print(length(M))
+## [1] 1
+M
+## [1] 35
+#How many distributers will have an expected revenue of more than 10 L?
+N = which(Distributers_2016$score_predict > 10)
+print(length(N))
+## [1] 10
+N
+##  [1] 32 34 35 39 61 67 70 74 76 85
+# 10 Distributers will have sales projection more than 10 lacs
+# Conclusion : As per the Inferences in the RESULT BELOW
+summary(Distributers_2016$prob_predict)
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##  0.0000  0.0000  0.0000  0.1561  0.0000  1.0000
+# The avg probabilty of being an active Distributer is only 15.61 % and there are some distributers who will be 100 % probable for billing. 
+
+summary(Distributers_2016$revenue_predict)
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##  0.0000  0.1462  1.3464  4.9794  3.5313 80.7940
+# The Avg Predicted sales projection among the Active distributers(billed on 2016) will be 4.97 lacs and a maximum up to 80 lacs.
+
+summary(Distributers_2016$score_predict)
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##    0.00    0.00    0.00    3.37    0.00   80.79
+# The Average score is 3.37 ie out of the total 93 Distributers - 3.37 will be the average sales projection.
+
+# How many distributers will have an expected revenue of more than 50 L?
+M = which(Distributers_2016$score_predict > 80)
+print(length(M))
+## [1] 1
+M
+## [1] 35
+# The distributer Maria Enterprises is predicted to have a sale of more than 80 lacs
+
+#How many distributers will have an expected revenue of more than 10 L?
+N = which(Distributers_2016$score_predict > 10)
+print(length(N))
+## [1] 10
+N
+##  [1] 32 34 35 39 61 67 70 74 76 85
+# 10 Distributers will have sales projection more than 10 lacs
+# The Probabilty~prediction model score for the overall 93 distributers gives us an idea for designing and optimising trade schemes.
+# out of 93 - 21 distributers have a positive score of actually being active next year ie 2017 .
+# These 27 distributers can be considered for optimising the Trade schemes
+# The RFm Factor gives an idea of Active and Non active Distributers.
+#  22 Distributers are found to be not performing in terms of Frequecny and Avg value.
+Add a new chunk by clicking the Insert Chunk button on the toolbar or by pressing Ctrl+Alt+I.
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the Preview button or press Ctrl+Shift+K to preview the HTML file).
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike Knit, Preview does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
